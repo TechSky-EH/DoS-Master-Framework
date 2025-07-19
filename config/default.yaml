@@ -1,0 +1,97 @@
+# DoS Master Framework - Default Configuration
+
+framework:
+  name: "DoS Master Framework"
+  version: "2.0"
+  author: "Tech Sky"
+  
+# Global settings
+global:
+  log_level: "INFO"
+  log_file: "/var/log/dos-master-framework/dmf.log"
+  max_threads: 50
+  default_timeout: 30
+  
+# Attack profiles
+profiles:
+  stealth:
+    description: "Low-rate attacks for detection testing"
+    max_rate: 100
+    max_threads: 5
+    default_duration: 300
+    
+  moderate:
+    description: "Balanced attacks for general testing"
+    max_rate: 1000
+    max_threads: 15
+    default_duration: 120
+    
+  aggressive:
+    description: "High-intensity attacks for stress testing"
+    max_rate: 10000
+    max_threads: 50
+    default_duration: 60
+
+# Attack-specific configurations
+attacks:
+  icmp_flood:
+    default_packet_size: 1024
+    max_packet_size: 65507
+    min_packet_size: 8
+    default_threads: 5
+    
+  udp_flood:
+    default_packet_size: 1024
+    default_ports: [53, 80, 123, 161, 443]
+    default_threads: 8
+    
+  syn_flood:
+    enable_spoofing: true
+    default_threads: 8
+    sequence_randomization: true
+    
+  http_flood:
+    user_agents:
+      - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      - "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15"
+      - "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+    default_threads: 20
+    request_timeout: 10
+    
+  slowloris:
+    default_connections: 200
+    keep_alive_interval: 15
+    connection_timeout: 30
+
+# Monitoring settings
+monitoring:
+  enabled: true
+  update_interval: 5
+  capture_packets: false
+  metrics_retention: 3600
+  
+# Reporting settings
+reporting:
+  format: "html"
+  include_graphs: true
+  include_raw_data: false
+  output_directory: "./reports"
+  
+# Web interface settings
+web_interface:
+  host: "0.0.0.0"
+  port: 8080
+  debug: false
+  secret_key: "change-this-secret-key"
+  
+# Safety settings
+safety:
+  require_confirmation: true
+  max_duration: 3600
+  blocked_targets:
+    - "8.8.8.8"
+    - "1.1.1.1"
+    - "google.com"
+    - "cloudflare.com"
+  whitelist_mode: false
+

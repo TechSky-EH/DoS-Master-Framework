@@ -1,0 +1,213 @@
+# DoS Master Framework - Attack Templates
+
+# Predefined attack configurations for common scenarios
+
+templates:
+  
+  # Basic attacks for learning
+  basic_icmp_test:
+    attack: "icmp_flood"
+    description: "Basic ICMP flood for educational purposes"
+    duration: 30
+    threads: 3
+    packet_size: 64
+    rate: 100
+    profile: "stealth"
+    
+  basic_syn_test:
+    attack: "syn_flood"
+    description: "Basic SYN flood test"
+    duration: 60
+    threads: 5
+    port: 80
+    spoof_ips: false
+    profile: "stealth"
+    
+  basic_http_test:
+    attack: "http_flood"
+    description: "Basic HTTP flood test"
+    duration: 45
+    threads: 10
+    target_paths: ["/", "/index.html"]
+    profile: "stealth"
+    
+  # Intermediate attacks
+  network_stress_test:
+    attack: "multi_vector"
+    description: "Network layer stress test"
+    duration: 120
+    vectors: ["icmp_flood", "udp_flood"]
+    threads_per_vector: 8
+    profile: "moderate"
+    
+  tcp_exhaustion_test:
+    attack: "syn_flood"
+    description: "TCP connection exhaustion test"
+    duration: 300
+    threads: 15
+    port: 80
+    spoof_ips: true
+    profile: "moderate"
+    
+  web_server_stress:
+    attack: "multi_vector"
+    description: "Web server stress test"
+    duration: 180
+    vectors: ["http_flood", "slowloris"]
+    profile: "moderate"
+    http_flood:
+      threads: 20
+      target_paths: ["/", "/heavy.php", "/search"]
+    slowloris:
+      connections: 150
+      
+  # Advanced attacks
+  comprehensive_dos:
+    attack: "multi_vector"
+    description: "Comprehensive DoS attack simulation"
+    duration: 600
+    vectors: ["icmp_flood", "udp_flood", "syn_flood", "http_flood"]
+    profile: "aggressive"
+    stagger_delay: 30
+    
+  amplification_test:
+    attack: "amplification"
+    description: "DNS/NTP amplification test (local servers only)"
+    duration: 120
+    protocols: ["dns", "ntp"]
+    amplification_factor: 50
+    profile: "moderate"
+    
+  # Specialized scenarios
+  connection_exhaustion:
+    attack: "slowloris"
+    description: "Connection pool exhaustion"
+    duration: 900
+    connections: 500
+    keep_alive_interval: 10
+    profile: "moderate"
+    
+  bandwidth_saturation:
+    attack: "udp_flood"
+    description: "Bandwidth saturation test"
+    duration: 180
+    threads: 20
+    packet_size: 1450
+    ports: [53, 80, 123, 443, 8080]
+    profile: "aggressive"
+    
+  protocol_confusion:
+    attack: "multi_vector"
+    description: "Mixed protocol attack"
+    duration: 240
+    vectors: ["syn_flood", "udp_flood"]
+    syn_flood:
+      ports: [80, 443, 22, 21, 25]
+      threads: 10
+    udp_flood:
+      ports: [53, 123, 161, 514]
+      threads: 8
+    profile: "moderate"
+
+# Custom attack scenarios
+scenarios:
+  
+  penetration_test:
+    name: "Penetration Test Scenario"
+    description: "Standard pentest DoS assessment"
+    phases:
+      - name: "reconnaissance"
+        attacks: ["port_scan", "service_enum"]
+        duration: 60
+      - name: "light_testing"
+        attacks: ["basic_icmp_test", "basic_syn_test"]
+        duration: 120
+      - name: "stress_testing"
+        attacks: ["network_stress_test", "web_server_stress"]
+        duration: 300
+      - name: "recovery_test"
+        description: "Monitor service recovery"
+        duration: 180
+        monitor_only: true
+        
+  red_team_exercise:
+    name: "Red Team Exercise"
+    description: "Advanced persistent DoS simulation"
+    phases:
+      - name: "initial_probe"
+        attacks: ["basic_icmp_test"]
+        duration: 30
+      - name: "escalation"
+        attacks: ["tcp_exhaustion_test"]
+        duration: 180
+      - name: "full_assault"
+        attacks: ["comprehensive_dos"]
+        duration: 600
+      - name: "persistence"
+        attacks: ["connection_exhaustion"]
+        duration: 1800
+        
+  blue_team_training:
+    name: "Blue Team Training"
+    description: "Defensive training scenarios"
+    phases:
+      - name: "detection_training"
+        attacks: ["basic_icmp_test", "basic_syn_test"]
+        duration: 300
+        detection_focus: true
+      - name: "mitigation_training"
+        attacks: ["network_stress_test"]
+        duration: 600
+        mitigation_focus: true
+      - name: "recovery_training"
+        attacks: ["comprehensive_dos"]
+        duration: 900
+        recovery_focus: true
+
+# Target profiles
+target_profiles:
+  
+  web_server:
+    description: "Standard web server"
+    common_ports: [80, 443, 8080, 8443]
+    recommended_attacks: ["http_flood", "slowloris", "syn_flood"]
+    considerations:
+      - "Check for reverse proxy"
+      - "Monitor connection limits"
+      - "Test SSL/TLS handling"
+      
+  database_server:
+    description: "Database server"
+    common_ports: [3306, 5432, 1433, 1521]
+    recommended_attacks: ["syn_flood", "connection_exhaustion"]
+    considerations:
+      - "Monitor connection pools"
+      - "Check query timeouts"
+      - "Test failover mechanisms"
+      
+  dns_server:
+    description: "DNS server"
+    common_ports: [53]
+    recommended_attacks: ["udp_flood", "dns_amplification"]
+    considerations:
+      - "Test recursive queries"
+      - "Monitor cache behavior"
+      - "Check rate limiting"
+      
+  mail_server:
+    description: "Mail server"
+    common_ports: [25, 110, 143, 993, 995]
+    recommended_attacks: ["syn_flood", "connection_exhaustion"]
+    considerations:
+      - "Test SMTP handling"
+      - "Monitor queue sizes"
+      - "Check greylisting"
+      
+  iot_device:
+    description: "IoT device"
+    common_ports: [80, 443, 23, 22]
+    recommended_attacks: ["basic_icmp_test", "basic_syn_test"]
+    considerations:
+      - "Limited resources"
+      - "Use gentle attacks"
+      - "Monitor device stability"

@@ -1,0 +1,39 @@
+# DoS Master Framework Requirements
+
+# Core dependencies
+scapy>=2.4.5
+psutil>=5.8.0
+pyyaml>=6.0
+requests>=2.28.0
+click>=8.0.0
+colorama>=0.4.4
+python-dateutil>=2.8.2
+netifaces>=0.11.0
+
+# Web interface
+flask>=2.2.0
+flask-socketio>=5.3.0
+jinja2>=3.1.0
+
+# Data analysis and visualization
+numpy>=1.21.0
+pandas>=1.4.0
+matplotlib>=3.5.0
+plotly>=5.10.0
+
+# Testing and development
+pytest>=7.0.0
+pytest-cov>=3.0.0
+flake8>=4.0.0
+black>=22.0.0
+
+# Optional dependencies for enhanced functionality
+tqdm>=4.64.0        # Progress bars
+tabulate>=0.8.10    # Table formatting
+rich>=12.0.0        # Rich terminal output
+ipython>=8.0.0      # Enhanced REPL
+cryptography>=3.4.8 # Encryption utilities
+dnspython>=2.2.0    # DNS utilities
+python-nmap>=0.7.1  # Nmap integration
+paramiko>=2.11.0    # SSH utilities
+selenium>=4.5.0     # Web automation (optional)
