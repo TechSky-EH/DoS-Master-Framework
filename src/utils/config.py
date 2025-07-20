@@ -121,116 +121,116 @@ class ConfigManager:
             'global': {
                 'log_level': 'INFO',
                 'log_file': '/var/log/dos-master-framework/dmf.log',
-               'max_threads': 50,
-               'default_timeout': 30
-           },
-           'profiles': {
-               'stealth': {
-                   'description': 'Low-rate attacks for detection testing',
-                   'max_rate': 100,
-                   'max_threads': 5,
-                   'default_duration': 300
-               },
-               'moderate': {
-                   'description': 'Balanced attacks for general testing',
-                   'max_rate': 1000,
-                   'max_threads': 15,
-                   'default_duration': 120
-               },
-               'aggressive': {
-                   'description': 'High-intensity attacks for stress testing',
-                   'max_rate': 10000,
-                   'max_threads': 50,
-                   'default_duration': 60
-               }
-           },
-           'attacks': {
-               'icmp_flood': {
-                   'default_packet_size': 1024,
-                   'max_packet_size': 65507,
-                   'min_packet_size': 8,
-                   'default_threads': 5
-               },
-               'udp_flood': {
-                   'default_packet_size': 1024,
-                   'default_ports': [53, 80, 123, 161, 443],
-                   'default_threads': 8
-               },
-               'syn_flood': {
-                   'enable_spoofing': True,
-                   'default_threads': 8,
-                   'sequence_randomization': True
-               },
-               'http_flood': {
-                   'default_threads': 20,
-                   'request_timeout': 10
-               }
-           },
-           'monitoring': {
-               'enabled': True,
-               'update_interval': 5,
-               'capture_packets': False,
-               'metrics_retention': 3600
-           },
-           'safety': {
-               'require_confirmation': True,
-               'max_duration': 3600,
-               'blocked_targets': [
-                   '8.8.8.8', '1.1.1.1', 'google.com', 'cloudflare.com'
-               ],
-               'whitelist_mode': False
-           }
-       }
-   
-   def _merge_env_vars(self, config: Dict[str, Any]) -> Dict[str, Any]:
-       """Merge environment variables into configuration"""
-       env_mappings = {
-           'DMF_LOG_LEVEL': 'global.log_level',
-           'DMF_LOG_FILE': 'global.log_file',
-           'DMF_MAX_THREADS': 'global.max_threads',
-           'DMF_WEB_PORT': 'web_interface.port',
-           'DMF_WEB_HOST': 'web_interface.host'
-       }
-       
-       for env_var, config_path in env_mappings.items():
-           env_value = os.getenv(env_var)
-           if env_value:
-               self._set_nested_value(config, config_path, env_value)
-       
-       return config
-   
-   def _set_nested_value(self, config: Dict[str, Any], key_path: str, value: Any):
-       """Set nested value in configuration"""
-       keys = key_path.split('.')
-       current = config
-       
-       for key in keys[:-1]:
-           if key not in current:
-               current[key] = {}
-           current = current[key]
-       
-       # Try to convert value to appropriate type
-       if isinstance(current.get(keys[-1]), int):
-           try:
-               value = int(value)
-           except ValueError:
-               pass
-       elif isinstance(current.get(keys[-1]), bool):
-           value = value.lower() in ('true', '1', 'yes', 'on')
-       
-       current[keys[-1]] = value
+                'max_threads': 50,
+                'default_timeout': 30
+            },
+            'profiles': {
+                'stealth': {
+                    'description': 'Low-rate attacks for detection testing',
+                    'max_rate': 100,
+                    'max_threads': 5,
+                    'default_duration': 300
+                },
+                'moderate': {
+                    'description': 'Balanced attacks for general testing',
+                    'max_rate': 1000,
+                    'max_threads': 15,
+                    'default_duration': 120
+                },
+                'aggressive': {
+                    'description': 'High-intensity attacks for stress testing',
+                    'max_rate': 10000,
+                    'max_threads': 50,
+                    'default_duration': 60
+                }
+            },
+            'attacks': {
+                'icmp_flood': {
+                    'default_packet_size': 1024,
+                    'max_packet_size': 65507,
+                    'min_packet_size': 8,
+                    'default_threads': 5
+                },
+                'udp_flood': {
+                    'default_packet_size': 1024,
+                    'default_ports': [53, 80, 123, 161, 443],
+                    'default_threads': 8
+                },
+                'syn_flood': {
+                    'enable_spoofing': True,
+                    'default_threads': 8,
+                    'sequence_randomization': True
+                },
+                'http_flood': {
+                    'default_threads': 20,
+                    'request_timeout': 10
+                }
+            },
+            'monitoring': {
+                'enabled': True,
+                'update_interval': 5,
+                'capture_packets': False,
+                'metrics_retention': 3600
+            },
+            'safety': {
+                'require_confirmation': True,
+                'max_duration': 3600,
+                'blocked_targets': [
+                    '8.8.8.8', '1.1.1.1', 'google.com', 'cloudflare.com'
+                ],
+                'whitelist_mode': False
+            }
+        }
+    
+    def _merge_env_vars(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Merge environment variables into configuration"""
+        env_mappings = {
+            'DMF_LOG_LEVEL': 'global.log_level',
+            'DMF_LOG_FILE': 'global.log_file',
+            'DMF_MAX_THREADS': 'global.max_threads',
+            'DMF_WEB_PORT': 'web_interface.port',
+            'DMF_WEB_HOST': 'web_interface.host'
+        }
+        
+        for env_var, config_path in env_mappings.items():
+            env_value = os.getenv(env_var)
+            if env_value:
+                self._set_nested_value(config, config_path, env_value)
+        
+        return config
+    
+    def _set_nested_value(self, config: Dict[str, Any], key_path: str, value: Any):
+        """Set nested value in configuration"""
+        keys = key_path.split('.')
+        current = config
+        
+        for key in keys[:-1]:
+            if key not in current:
+                current[key] = {}
+            current = current[key]
+        
+        # Try to convert value to appropriate type
+        if isinstance(current.get(keys[-1]), int):
+            try:
+                value = int(value)
+            except ValueError:
+                pass
+        elif isinstance(current.get(keys[-1]), bool):
+            value = value.lower() in ('true', '1', 'yes', 'on')
+        
+        current[keys[-1]] = value
 
 # Global configuration instance
 config_manager = ConfigManager()
 
 def load_config(config_name: str = 'default') -> Dict[str, Any]:
-   """Load configuration (convenience function)"""
-   return config_manager.load_config(config_name)
+    """Load configuration (convenience function)"""
+    return config_manager.load_config(config_name)
 
 def get_setting(key_path: str, default: Any = None, config_name: str = 'default') -> Any:
-   """Get configuration setting (convenience function)"""
-   return config_manager.get_setting(config_name, key_path, default)
+    """Get configuration setting (convenience function)"""
+    return config_manager.get_setting(config_name, key_path, default)
 
 def set_setting(key_path: str, value: Any, config_name: str = 'default') -> bool:
-   """Set configuration setting (convenience function)"""
-   return config_manager.set_setting(config_name, key_path, value)
+    """Set configuration setting (convenience function)"""
+    return config_manager.set_setting(config_name, key_path, value)
