@@ -517,113 +517,113 @@ class TrafficAnalyzer:
                         
                         # Check for attack patterns every 30 seconds
                         if int(time.time()) % 30 == 0:
-                           full_analysis = self.analyze_pcap_file(self.capture_file)
-                           attacks = full_analysis.get('attack_detection', {})
-                           
-                           if attacks:
-                               self.logger.warning(f"Potential attacks detected: {list(attacks.keys())}")
-               
-               time.sleep(5)  # Analyze every 5 seconds
-               
-           except Exception as e:
-               self.logger.error(f"Continuous analysis error: {e}")
-               time.sleep(10)
-   
-   def export_analysis(self, analysis_results: Dict[str, Any], export_file: str):
-       """Export analysis results to file"""
-       try:
-           # Add metadata
-           export_data = {
-               'analysis_timestamp': datetime.now().isoformat(),
-               'analyzer_version': '2.0',
-               'interface': self.interface,
-               'results': analysis_results
-           }
-           
-           with open(export_file, 'w') as f:
-               json.dump(export_data, f, indent=2, default=str)
-           
-           self.logger.info(f"Analysis results exported to {export_file}")
-           
-       except Exception as e:
-           self.logger.error(f"Failed to export analysis: {e}")
-   
-   def generate_summary_report(self, analysis_results: Dict[str, Any]) -> str:
-       """Generate human-readable summary report"""
-       try:
-           report_lines = []
-           report_lines.append("=" * 60)
-           report_lines.append("TRAFFIC ANALYSIS SUMMARY REPORT")
-           report_lines.append("=" * 60)
-           report_lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-           report_lines.append("")
-           
-           # Basic statistics
-           basic_stats = analysis_results.get('basic_stats', {})
-           if basic_stats:
-               report_lines.append("BASIC STATISTICS:")
-               report_lines.append(f"  Total Packets: {basic_stats.get('total_packets', 0):,}")
-               report_lines.append(f"  Total Bytes: {basic_stats.get('total_bytes', 0):,}")
-               report_lines.append(f"  Duration: {basic_stats.get('duration', 0):.2f} seconds")
-               report_lines.append(f"  Packet Rate: {basic_stats.get('packets_per_second', 0):.0f} pps")
-               report_lines.append(f"  Bandwidth: {basic_stats.get('bytes_per_second', 0) * 8 / 1024 / 1024:.2f} Mbps")
-               report_lines.append("")
-           
-           # Protocol distribution
-           protocol_stats = analysis_results.get('protocol_stats', {})
-           if protocol_stats:
-               report_lines.append("PROTOCOL DISTRIBUTION:")
-               total_packets = sum(protocol_stats.values())
-               for protocol, count in sorted(protocol_stats.items(), key=lambda x: x[1], reverse=True):
-                   percentage = (count / total_packets) * 100 if total_packets > 0 else 0
-                   report_lines.append(f"  {protocol}: {count:,} packets ({percentage:.1f}%)")
-               report_lines.append("")
-           
-           # Top sources
-           top_sources = analysis_results.get('top_sources', [])
-           if top_sources:
-               report_lines.append("TOP SOURCE IPs:")
-               for source in top_sources[:5]:
-                   report_lines.append(f"  {source['ip']}: {source['packet_count']:,} packets")
-               report_lines.append("")
-           
-           # Attack detection
-           attacks = analysis_results.get('attack_detection', {})
-           if attacks:
-               report_lines.append("DETECTED ATTACKS:")
-               for attack_type, details in attacks.items():
-                   confidence = details.get('confidence', 0) * 100
-                   report_lines.append(f"  {attack_type.upper()}: {confidence:.0f}% confidence")
-                   for indicator in details.get('indicators', []):
-                       report_lines.append(f"    - {indicator}")
-               report_lines.append("")
-           
-           # Anomalies
-           anomalies = analysis_results.get('anomalies', [])
-           if anomalies:
-               report_lines.append("DETECTED ANOMALIES:")
-               for anomaly in anomalies:
-                   severity = anomaly.get('severity', 'unknown').upper()
-                   description = anomaly.get('description', 'No description')
-                   report_lines.append(f"  [{severity}] {description}")
-               report_lines.append("")
-           
-           report_lines.append("=" * 60)
-           
-           return "\n".join(report_lines)
-           
-       except Exception as e:
-           self.logger.error(f"Failed to generate summary report: {e}")
-           return "Error generating report"
-   
-   def cleanup(self):
-       """Cleanup resources"""
-       self.stop_capture()
-       
-       # Clear analysis data
-       self.packet_stats.clear()
-       self.protocol_stats.clear()
-       self.source_ips.clear()
-       self.destination_ports.clear()
-       self.packet_sizes.clear()
-       self.timestamps.clear()
+                            full_analysis = self.analyze_pcap_file(self.capture_file)
+                            attacks = full_analysis.get('attack_detection', {})
+                            
+                            if attacks:
+                                self.logger.warning(f"Potential attacks detected: {list(attacks.keys())}")
+                
+                time.sleep(5)  # Analyze every 5 seconds
+                
+            except Exception as e:
+                self.logger.error(f"Continuous analysis error: {e}")
+                time.sleep(10)
+    
+    def export_analysis(self, analysis_results: Dict[str, Any], export_file: str):
+        """Export analysis results to file"""
+        try:
+            # Add metadata
+            export_data = {
+                'analysis_timestamp': datetime.now().isoformat(),
+                'analyzer_version': '2.0',
+                'interface': self.interface,
+                'results': analysis_results
+            }
+            
+            with open(export_file, 'w') as f:
+                json.dump(export_data, f, indent=2, default=str)
+            
+            self.logger.info(f"Analysis results exported to {export_file}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to export analysis: {e}")
+    
+    def generate_summary_report(self, analysis_results: Dict[str, Any]) -> str:
+        """Generate human-readable summary report"""
+        try:
+            report_lines = []
+            report_lines.append("=" * 60)
+            report_lines.append("TRAFFIC ANALYSIS SUMMARY REPORT")
+            report_lines.append("=" * 60)
+            report_lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            report_lines.append("")
+            
+            # Basic statistics
+            basic_stats = analysis_results.get('basic_stats', {})
+            if basic_stats:
+                report_lines.append("BASIC STATISTICS:")
+                report_lines.append(f"  Total Packets: {basic_stats.get('total_packets', 0):,}")
+                report_lines.append(f"  Total Bytes: {basic_stats.get('total_bytes', 0):,}")
+                report_lines.append(f"  Duration: {basic_stats.get('duration', 0):.2f} seconds")
+                report_lines.append(f"  Packet Rate: {basic_stats.get('packets_per_second', 0):.0f} pps")
+                report_lines.append(f"  Bandwidth: {basic_stats.get('bytes_per_second', 0) * 8 / 1024 / 1024:.2f} Mbps")
+                report_lines.append("")
+            
+            # Protocol distribution
+            protocol_stats = analysis_results.get('protocol_stats', {})
+            if protocol_stats:
+                report_lines.append("PROTOCOL DISTRIBUTION:")
+                total_packets = sum(protocol_stats.values())
+                for protocol, count in sorted(protocol_stats.items(), key=lambda x: x[1], reverse=True):
+                    percentage = (count / total_packets) * 100 if total_packets > 0 else 0
+                    report_lines.append(f"  {protocol}: {count:,} packets ({percentage:.1f}%)")
+                report_lines.append("")
+            
+            # Top sources
+            top_sources = analysis_results.get('top_sources', [])
+            if top_sources:
+                report_lines.append("TOP SOURCE IPs:")
+                for source in top_sources[:5]:
+                    report_lines.append(f"  {source['ip']}: {source['packet_count']:,} packets")
+                report_lines.append("")
+            
+            # Attack detection
+            attacks = analysis_results.get('attack_detection', {})
+            if attacks:
+                report_lines.append("DETECTED ATTACKS:")
+                for attack_type, details in attacks.items():
+                    confidence = details.get('confidence', 0) * 100
+                    report_lines.append(f"  {attack_type.upper()}: {confidence:.0f}% confidence")
+                    for indicator in details.get('indicators', []):
+                        report_lines.append(f"    - {indicator}")
+                report_lines.append("")
+            
+            # Anomalies
+            anomalies = analysis_results.get('anomalies', [])
+            if anomalies:
+                report_lines.append("DETECTED ANOMALIES:")
+                for anomaly in anomalies:
+                    severity = anomaly.get('severity', 'unknown').upper()
+                    description = anomaly.get('description', 'No description')
+                    report_lines.append(f"  [{severity}] {description}")
+                report_lines.append("")
+            
+            report_lines.append("=" * 60)
+            
+            return "\n".join(report_lines)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to generate summary report: {e}")
+            return "Error generating report"
+    
+    def cleanup(self):
+        """Cleanup resources"""
+        self.stop_capture()
+        
+        # Clear analysis data
+        self.packet_stats.clear()
+        self.protocol_stats.clear()
+        self.source_ips.clear()
+        self.destination_ports.clear()
+        self.packet_sizes.clear()
+        self.timestamps.clear()
