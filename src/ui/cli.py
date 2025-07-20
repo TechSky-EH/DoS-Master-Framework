@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DoS Master Framework - Command Line Interface - ROBUST VERSION
+DoS Master Framework - Command Line Interface - FIXED VERSION
 Professional DoS Testing Framework for Authorized Testing Only
 
 Author: Tech Sky

