@@ -734,7 +734,7 @@ Examples:
             print()
         
         # Display banner unless minimal output requested
-        if not any([args.list_attacks, args.validate, args.version]):
+        if not any([args.list_attacks, args.validate]):
             self.display_banner()
         
         # Handle validation
