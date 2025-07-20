@@ -61,8 +61,9 @@ def import_framework_components():
     
     components = {}
     
-    # Strategy 1: Relative imports
+    # Strategy 1: Relative imports from current location
     try:
+        # Try importing relative to current src directory
         from core.engine import DoSEngine
         from core.monitor import Monitor
         from core.analyzer import TrafficAnalyzer
@@ -83,10 +84,10 @@ def import_framework_components():
         })
         return components
         
-    except ImportError:
-        pass
+    except ImportError as e1:
+        IMPORT_ERRORS.append(f"Relative imports failed: {e1}")
     
-    # Strategy 2: Absolute imports
+    # Strategy 2: Absolute imports assuming we're in the right directory
     try:
         import core.engine
         import core.monitor
@@ -108,32 +109,33 @@ def import_framework_components():
         })
         return components
         
-    except ImportError:
-        pass
+    except ImportError as e2:
+        IMPORT_ERRORS.append(f"Absolute imports failed: {e2}")
     
-    # Strategy 3: Direct file imports
+    # Strategy 3: Try importing from src package
     try:
-        framework_paths = [
-            '/opt/dos-master-framework/src',
-            os.path.join(os.path.dirname(__file__), '..'),
-            os.path.dirname(os.path.dirname(__file__)),
-        ]
+        import src.core.engine
+        import src.core.monitor
+        import src.core.analyzer
+        import src.core.reporter
+        import src.utils.validation
+        import src.utils.logger
+        import src.utils.config
         
-        for base_path in framework_paths:
-            if os.path.exists(base_path):
-                sys.path.insert(0, base_path)
-                try:
-                    import core.engine
-                    components['DoSEngine'] = core.engine.DoSEngine
-                    break
-                except ImportError:
-                    continue
+        components.update({
+            'DoSEngine': src.core.engine.DoSEngine,
+            'Monitor': src.core.monitor.Monitor,
+            'TrafficAnalyzer': src.core.analyzer.TrafficAnalyzer,
+            'ReportGenerator': src.core.reporter.ReportGenerator,
+            'validate_target': src.utils.validation.validate_target,
+            'validate_attack_params': src.utils.validation.validate_attack_params,
+            'setup_logger': src.utils.logger.setup_logger,
+            'load_config': src.utils.config.load_config
+        })
+        return components
         
-        if components:
-            return components
-            
-    except ImportError:
-        pass
+    except ImportError as e3:
+        IMPORT_ERRORS.append(f"Src package imports failed: {e3}")
     
     # If all strategies fail, create fallback implementations
     IMPORTS_OK = False
@@ -193,7 +195,11 @@ def create_fallback_components():
             duration = config.get('duration', 10)
             threads = config.get('threads', 5)
             
-            time.sleep(min(duration, 5))  # Simulate for max 5 seconds
+            # Simulate realistic timing
+            for i in range(min(duration, 10)):
+                time.sleep(1)
+                if i % 2 == 0:
+                    self.logger.info(f"Simulation progress: {i+1}/{min(duration, 10)} seconds")
             
             return {
                 'attack_type': attack_type,
@@ -266,7 +272,7 @@ class DoSMasterCLI:
 ║  Use only on systems you own or have written permission         ║
 ╚══════════════════════════════════════════════════════════════════╝
 
-Author: Tech Sky | License: MIT | GitHub: TechSky/dos-master-framework
+Author: Tech Sky | License: MIT | GitHub: TechSky-EH/DoS-Master-Framework
 """
         print(banner)
         
@@ -437,6 +443,12 @@ Examples:
         # Check permissions
         is_root = os.geteuid() == 0
         checks.append(("Root Access", "Yes" if is_root else "No", "✅" if is_root else "⚠️"))
+        
+        # Check installation directories
+        install_dirs = ["/opt/dos-master-framework", "/opt/dos-master-framework/venv"]
+        for install_dir in install_dirs:
+            exists = os.path.exists(install_dir)
+            checks.append((f"Directory: {os.path.basename(install_dir)}", "Exists" if exists else "Missing", "✅" if exists else "❌"))
         
         # Display results
         for check_name, status, icon in checks:

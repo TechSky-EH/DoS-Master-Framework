@@ -172,7 +172,7 @@ create_directories() {
     sudo mkdir -p "$INSTALL_DIR"
     sudo mkdir -p "$CONFIG_DIR"
     sudo mkdir -p "$LOG_DIR"
-    sudo mkdir -p "/opt/dos-master-framework/reports"
+    sudo mkdir -p "$INSTALL_DIR/reports"
     
     # Set proper permissions
     sudo chown -R $USER:$USER "$INSTALL_DIR"
@@ -185,10 +185,9 @@ create_directories() {
 install_python_deps() {
     print_status "Installing Python dependencies..."
     
-    # Create virtual environment
-    cd "$INSTALL_DIR"
-    python3 -m venv venv
-    source venv/bin/activate
+    # Create virtual environment in the install directory
+    python3 -m venv "$INSTALL_DIR/venv"
+    source "$INSTALL_DIR/venv/bin/activate"
     
     # Upgrade pip
     pip install --upgrade pip
@@ -213,7 +212,7 @@ install_python_deps() {
         python-dateutil
     
     # Create requirements file
-    pip freeze > requirements.txt
+    pip freeze > "$INSTALL_DIR/requirements.txt"
     
     deactivate
 }
@@ -226,26 +225,32 @@ install_framework() {
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
     
+    print_status "Script directory: $SCRIPT_DIR"
+    print_status "Project root: $PROJECT_ROOT"
+    
     # Check if we're running from the project directory
     if [[ -d "$PROJECT_ROOT/src" && -f "$PROJECT_ROOT/setup.py" ]]; then
         print_status "Installing from local project directory..."
         
         # Copy framework files
         cp -r "$PROJECT_ROOT/src" "$INSTALL_DIR/"
+        print_status "Source files copied"
         
         # Copy configuration files
         if [[ -d "$PROJECT_ROOT/config" ]]; then
-            cp -r "$PROJECT_ROOT/config"/* "$CONFIG_DIR/"
+            sudo cp -r "$PROJECT_ROOT/config"/* "$CONFIG_DIR/" 2>/dev/null || true
+            print_status "Configuration files copied"
         fi
         
         # Copy documentation
         if [[ -d "$PROJECT_ROOT/docs" ]]; then
-            cp -r "$PROJECT_ROOT/docs" "$INSTALL_DIR/"
+            cp -r "$PROJECT_ROOT/docs" "$INSTALL_DIR/" 2>/dev/null || true
+            print_status "Documentation copied"
         fi
         
         # Copy requirements if it exists
         if [[ -f "$PROJECT_ROOT/requirements.txt" ]]; then
-            cp "$PROJECT_ROOT/requirements.txt" "$INSTALL_DIR/"
+            cp "$PROJECT_ROOT/requirements.txt" "$INSTALL_DIR/requirements_original.txt"
         fi
         
         # Copy LICENSE
@@ -261,42 +266,15 @@ install_framework() {
         print_status "Local installation completed successfully"
         
     else
-        print_status "Attempting to download from GitHub..."
-        
-        # Try to download from GitHub
-        GITHUB_URL="https://github.com/TechSky/dos-master-framework/archive/refs/heads/main.tar.gz"
-        
-        cd /tmp
-        if curl -L -f -o dos-master-framework.tar.gz "$GITHUB_URL" 2>/dev/null; then
-            # Verify the download is valid
-            if file dos-master-framework.tar.gz | grep -q "gzip compressed"; then
-                print_status "Download successful, extracting..."
-                tar -xzf dos-master-framework.tar.gz
-                
-                if [[ -d "dos-master-framework-main" ]]; then
-                    cp -r dos-master-framework-main/src/ "$INSTALL_DIR/"
-                    [[ -d "dos-master-framework-main/config" ]] && cp -r dos-master-framework-main/config/ "$CONFIG_DIR/"
-                    [[ -d "dos-master-framework-main/docs" ]] && cp -r dos-master-framework-main/docs/ "$INSTALL_DIR/"
-                    [[ -f "dos-master-framework-main/requirements.txt" ]] && cp dos-master-framework-main/requirements.txt "$INSTALL_DIR/"
-                    [[ -f "dos-master-framework-main/LICENSE" ]] && cp dos-master-framework-main/LICENSE "$INSTALL_DIR/"
-                    
-                    # Cleanup
-                    rm -rf dos-master-framework*
-                    print_status "GitHub installation completed successfully"
-                else
-                    print_error "Invalid archive structure"
-                    exit 1
-                fi
-            else
-                print_error "Downloaded file is not a valid gzip archive"
-                print_error "File contents: $(head -c 50 dos-master-framework.tar.gz)"
-                exit 1
-            fi
-        else
-            print_error "Failed to download from GitHub"
-            print_error "Please ensure you have internet connectivity or run from local project directory"
-            exit 1
-        fi
+        print_error "Could not find project files in expected locations"
+        print_error "Please ensure you are running this script from the DoS-Master-Framework directory"
+        print_error "Expected structure:"
+        print_error "  DoS-Master-Framework/"
+        print_error "    ├── src/"
+        print_error "    ├── scripts/"
+        print_error "    ├── config/"
+        print_error "    └── setup.py"
+        exit 1
     fi
     
     # Set permissions
@@ -309,73 +287,56 @@ create_wrapper() {
     print_status "Creating command-line wrapper..."
     
     # Create main dmf command
-    sudo tee "$BIN_DIR/dmf" > /dev/null << EOF
+    sudo tee "$BIN_DIR/dmf" > /dev/null << 'EOF'
 #!/bin/bash
 # DoS Master Framework Command Wrapper
 
 # Check if running as root for certain operations
-if [[ \$EUID -eq 0 ]] && [[ "\$1" != "--web-ui" ]]; then
+if [[ $EUID -eq 0 ]] && [[ "$1" != "--web-ui" ]]; then
     echo "⚠️  Running as root - some network operations require root privileges"
 fi
 
 # Activate virtual environment and run
-source "$INSTALL_DIR/venv/bin/activate"
-cd "$INSTALL_DIR"
-python3 -m src.ui.cli "\$@"
+source "/opt/dos-master-framework/venv/bin/activate"
+cd "/opt/dos-master-framework"
+python3 -m src.ui.cli "$@"
 deactivate
 EOF
     
     sudo chmod +x "$BIN_DIR/dmf"
     
     # Create update script
-    sudo tee "$BIN_DIR/dmf-update" > /dev/null << EOF
+    sudo tee "$BIN_DIR/dmf-update" > /dev/null << 'EOF'
 #!/bin/bash
 # DoS Master Framework Update Script
 
 echo "Updating DoS Master Framework..."
-cd "$INSTALL_DIR"
 
-# Backup current config
-cp -r "$CONFIG_DIR" "$CONFIG_DIR.backup.\$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+# Check if original project directory exists
+PROJECT_DIRS=(
+    "$HOME/DoS-Master-Framework"
+    "$HOME/dos-master-framework"
+    "/opt/dos-master-framework-source"
+)
 
-# Try git pull if it's a git repository
-if [[ -d ".git" ]]; then
-    git pull origin main 2>/dev/null || {
-        echo "Git update failed, trying manual download..."
-        MANUAL_UPDATE=1
-    }
-else
-    MANUAL_UPDATE=1
-fi
-
-if [[ "\$MANUAL_UPDATE" == "1" ]]; then
-    echo "Downloading latest release..."
-    cd /tmp
-    if curl -L -f -o dos-master-framework-update.tar.gz \\
-        "https://github.com/TechSky/dos-master-framework/archive/refs/heads/main.tar.gz" 2>/dev/null; then
-        
-        if file dos-master-framework-update.tar.gz | grep -q "gzip compressed"; then
-            tar -xzf dos-master-framework-update.tar.gz
-            cp -r dos-master-framework-main/src/ "$INSTALL_DIR/"
-            [[ -d "dos-master-framework-main/docs" ]] && cp -r dos-master-framework-main/docs/ "$INSTALL_DIR/"
-            rm -rf dos-master-framework*
-            echo "Manual update completed"
-        else
-            echo "Downloaded file is not valid, update failed"
-            exit 1
-        fi
-    else
-        echo "Download failed, update aborted"
-        exit 1
+FOUND_PROJECT=""
+for dir in "${PROJECT_DIRS[@]}"; do
+    if [[ -d "$dir/src" && -f "$dir/setup.py" ]]; then
+        FOUND_PROJECT="$dir"
+        break
     fi
+done
+
+if [[ -n "$FOUND_PROJECT" ]]; then
+    echo "Found project directory: $FOUND_PROJECT"
+    echo "To update, please run:"
+    echo "  cd $FOUND_PROJECT"
+    echo "  git pull  # if it's a git repository"
+    echo "  ./scripts/install.sh"
+else
+    echo "Project directory not found."
+    echo "Please download the latest version and run the installer again."
 fi
-
-# Update Python dependencies
-source "$INSTALL_DIR/venv/bin/activate"
-pip install --upgrade -r requirements.txt 2>/dev/null || echo "Requirements update skipped"
-deactivate
-
-echo "DoS Master Framework updated successfully"
 EOF
     
     sudo chmod +x "$BIN_DIR/dmf-update"
@@ -446,7 +407,7 @@ verify_installation() {
     fi
     
     # Test basic functionality
-    if timeout 10 dmf --version &> /dev/null; then
+    if timeout 15 dmf --version &> /dev/null; then
         print_status "Basic functionality test passed"
     else
         print_warning "Basic functionality test had issues (may be normal)"
@@ -475,11 +436,12 @@ show_post_install() {
     echo -e "${BLUE}Quick Start:${NC}"
     echo "  dmf --list-attacks           # List available attacks"
     echo "  dmf --help                   # Show help"
+    echo "  dmf --validate               # Check installation"
     echo "  dmf --web-ui                 # Start web interface"
     echo
-    echo -e "${BLUE}Example Usage:${NC}"
-    echo "  dmf --target 192.168.1.100 --attack icmp_flood --duration 60 --dry-run"
-    echo "  dmf --target 192.168.1.100 --attack syn_flood --port 80 --monitor --dry-run"
+    echo -e "${BLUE}Example Usage (SAFE):${NC}"
+    echo "  dmf --target 127.0.0.1 --attack icmp_flood --duration 5 --dry-run"
+    echo "  dmf --target 192.168.1.100 --attack syn_flood --port 80 --dry-run"
     echo
     echo -e "${BLUE}Important Files:${NC}"
     echo "  Framework:     $INSTALL_DIR"
@@ -487,10 +449,11 @@ show_post_install() {
     echo "  Logs:          $LOG_DIR"
     echo "  Documentation: $INSTALL_DIR/docs"
     echo
-    echo -e "${YELLOW}⚠️  Legal Notice:${NC}"
-    echo -e "${YELLOW}   This tool is for authorized testing only. Unauthorized use is illegal.${NC}"
-    echo -e "${YELLOW}   Always obtain written permission before testing any systems.${NC}"
-    echo -e "${YELLOW}   ALWAYS use --dry-run flag first to test safely.${NC}"
+    echo -e "${YELLOW}⚠️  CRITICAL SAFETY NOTICE:${NC}"
+    echo -e "${YELLOW}   • This tool is for AUTHORIZED testing ONLY${NC}"
+    echo -e "${YELLOW}   • ALWAYS use --dry-run flag first${NC}"
+    echo -e "${YELLOW}   • Only test systems you OWN or have explicit permission${NC}"
+    echo -e "${YELLOW}   • Unauthorized DoS attacks are ILLEGAL${NC}"
     echo
     echo -e "${BLUE}Support:${NC}"
     echo "  Documentation: $INSTALL_DIR/docs/README.md"

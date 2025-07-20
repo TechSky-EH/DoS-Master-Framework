@@ -161,74 +161,74 @@ class ICMPFlood:
         try:
             lines = output.split('\n')
             for line in lines:
-               if 'packets transmitted' in line:
-                   # Extract packet count from hping3 statistics
-                   parts = line.split()
-                   if len(parts) >= 3:
-                       packets = int(parts[0])
-                       self.packets_sent += packets
-                       self.logger.debug(f"Worker {worker_id}: {packets} packets sent")
-                       break
-       except Exception as e:
-           self.logger.debug(f"Failed to parse hping output: {e}")
-   
-   def _monitor_attack(self):
-       """Monitor attack progress"""
-       while self.attack_active:
-           elapsed = time.time() - self.start_time if self.start_time else 0
-           remaining = max(0, self.duration - elapsed)
-           
-           if elapsed > 0:
-               current_rate = self.packets_sent / elapsed
-               self.logger.info(f"ICMP flood progress: {elapsed:.1f}s elapsed, "
-                              f"{self.packets_sent} packets sent, "
-                              f"{current_rate:.1f} pps, "
-                              f"{remaining:.1f}s remaining")
-           
-           if remaining <= 0:
-               self.attack_active = False
-               break
-               
-           time.sleep(5)
-   
-   def _simulate_attack(self) -> Dict[str, Any]:
-       """Simulate attack for dry-run mode"""
-       self.logger.info("Simulating ICMP flood attack (dry-run mode)")
-       
-       # Simulate attack metrics
-       estimated_packets = self.threads * 1000 * self.duration  # Rough estimate
-       
-       time.sleep(2)  # Brief simulation delay
-       
-       return {
-           'attack_type': 'icmp_flood',
-           'target': self.target,
-           'duration': self.duration,
-           'packets_sent': estimated_packets,
-           'packets_failed': 0,
-           'success_rate': 100.0,
-           'avg_rate': estimated_packets / self.duration,
-           'threads_used': self.threads,
-           'packet_size': self.packet_size,
-           'timestamp': datetime.now().isoformat(),
-           'dry_run': True
-       }
-   
-   def stop(self):
-       """Stop the attack"""
-       self.logger.info("Stopping ICMP flood attack")
-       self.attack_active = False
-   
-   def get_status(self) -> Dict[str, Any]:
-       """Get current attack status"""
-       elapsed = time.time() - self.start_time if self.start_time else 0
-       current_rate = self.packets_sent / elapsed if elapsed > 0 else 0
-       
-       return {
-           'attack_type': 'icmp_flood',
-           'active': self.attack_active,
-           'elapsed_time': elapsed,
-           'packets_sent': self.packets_sent,
-           'current_rate': current_rate,
-           'threads_active': len([t for t in self.worker_threads if t.is_alive()])
-       }
+                if 'packets transmitted' in line:
+                    # Extract packet count from hping3 statistics
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        packets = int(parts[0])
+                        self.packets_sent += packets
+                        self.logger.debug(f"Worker {worker_id}: {packets} packets sent")
+                        break
+        except Exception as e:
+            self.logger.debug(f"Failed to parse hping output: {e}")
+    
+    def _monitor_attack(self):
+        """Monitor attack progress"""
+        while self.attack_active:
+            elapsed = time.time() - self.start_time if self.start_time else 0
+            remaining = max(0, self.duration - elapsed)
+            
+            if elapsed > 0:
+                current_rate = self.packets_sent / elapsed
+                self.logger.info(f"ICMP flood progress: {elapsed:.1f}s elapsed, "
+                               f"{self.packets_sent} packets sent, "
+                               f"{current_rate:.1f} pps, "
+                               f"{remaining:.1f}s remaining")
+            
+            if remaining <= 0:
+                self.attack_active = False
+                break
+                
+            time.sleep(5)
+    
+    def _simulate_attack(self) -> Dict[str, Any]:
+        """Simulate attack for dry-run mode"""
+        self.logger.info("Simulating ICMP flood attack (dry-run mode)")
+        
+        # Simulate attack metrics
+        estimated_packets = self.threads * 1000 * self.duration  # Rough estimate
+        
+        time.sleep(2)  # Brief simulation delay
+        
+        return {
+            'attack_type': 'icmp_flood',
+            'target': self.target,
+            'duration': self.duration,
+            'packets_sent': estimated_packets,
+            'packets_failed': 0,
+            'success_rate': 100.0,
+            'avg_rate': estimated_packets / self.duration,
+            'threads_used': self.threads,
+            'packet_size': self.packet_size,
+            'timestamp': datetime.now().isoformat(),
+            'dry_run': True
+        }
+    
+    def stop(self):
+        """Stop the attack"""
+        self.logger.info("Stopping ICMP flood attack")
+        self.attack_active = False
+    
+    def get_status(self) -> Dict[str, Any]:
+        """Get current attack status"""
+        elapsed = time.time() - self.start_time if self.start_time else 0
+        current_rate = self.packets_sent / elapsed if elapsed > 0 else 0
+        
+        return {
+            'attack_type': 'icmp_flood',
+            'active': self.attack_active,
+            'elapsed_time': elapsed,
+            'packets_sent': self.packets_sent,
+            'current_rate': current_rate,
+            'threads_active': len([t for t in self.worker_threads if t.is_alive()])
+        }
